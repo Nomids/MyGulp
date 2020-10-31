@@ -1,4 +1,3 @@
-//Подключаем галп
 const {
   src,
   dest,
@@ -19,30 +18,30 @@ const autoprefixer = require('gulp-autoprefixer')
 const sync = require('browser-sync').create()
 const gulpWebpack = require('webpack-stream')
 const imagemin = require('gulp-imagemin')
+const svgSprite = require('gulp-svg-sprite')
+const svgmin = require('gulp-svgmin')
+const cheerio = require('gulp-cheerio')
 const fs = require('fs')
 const pug = require('gulp-pug');
-const { resolve } = require('path');
-const { rejects } = require('assert');
 
 
 const compilePreprocessorCSS = 'scss'
 const compilePreprocessorHTML = 'pug'
 
 const returnCompile = (name)=>{
+  let defaultComile = `@import "./components/${name}";\n`
   switch(compilePreprocessorCSS){
     case "styl": 
-      return `@import './components/${name}'\n`; 
-    break;
-    case "scss": 
-      return `@import "./components/${name}";\n`; 
+      defaultComile = `@import './components/${name}'\n`; 
     break;
     case "sass": 
-      return `@import "./components/${name}"\n`; 
+      defaultComile = `@import "./components/${name}"\n`; 
     break;
     case "less": 
-      return `@import "./components/_${name}.less";\n`; 
+      defaultComile = `@import "./components/_${name}.less";\n`; 
     break;
   }
+  return defaultComile;
 }
 
 function html() {
@@ -62,13 +61,37 @@ function html() {
   }
 }
 
+const svgSprites = () => {
+  return src('./src/img/**.svg')
+    .pipe(svgmin({
+      js2svg: {
+        pretty: true
+      }
+    }))
+    .pipe(cheerio({
+      run: ($) => {
+        $('[fill]').removeAttr('fill');
+        $('[stroke]').removeAttr('stroke');
+        $('[style]').removeAttr('style');
+      },
+      parserOptions: {xmlMode: true}
+    }))
+    .pipe(svgSprite({
+      mode: {
+        stack: {
+          sprite: "../sprite.svg" //sprite file name
+        }
+      },
+    }))
+    .pipe(dest('./dist/img'));
+}
 
 function webpacks() {
   return src('src/js/main.js')
     .pipe(gulpWebpack({
       mode: 'production',
       output: {
-        filename: '[name].js',
+        filename: 'main.js',
       },
       module: {
         rules: [{
@@ -96,12 +119,10 @@ function webpacks() {
     .pipe(sync.stream());
 }
 
-
 function fonts() {
   return src('./src/font/**.ttf')
     .pipe(dest('./dist/font/'));
 }
-
 
 function stylecCompiler() {
   return src(`src/${compilePreprocessorCSS}/index.${compilePreprocessorCSS}`)
@@ -117,13 +138,11 @@ function stylecCompiler() {
     .pipe(sync.stream());
 }
 
-
 function minifyImg() {
-  return src('src/img/*')
+  return src(['./src/img/**.jpg', './src/img/**.png', './src/img/**.jpeg'])
     .pipe(imagemin())
     .pipe(dest('dist/img'))
 }
-
 
 const cb = () => {};
 
@@ -170,27 +189,28 @@ const checkWeight = (fontname) => {
 }
 
 let srcFonts = './src/scss/fontstyle/_fonts.scss';
-let appFonts = './app/fonts/';
+let appFonts = './src/font/';
 
 const fontsStyle = (done) => {
   let file_content = fs.readFileSync(srcFonts);
 
   fs.writeFile(srcFonts, '', cb);
-  fs.appendFile(srcFonts, '@import "./font-face";\r\n', cb);
-  fs.readdir(appFonts, function (err, items) {
+  fs.appendFile(srcFonts, '@import "./font-face";\r\n\r\n', cb);
+  fs.readdir(appFonts, '', function (err, items) {
     if (items) {
       let c_fontname;
-      for (var i = 0; i < items.length; i++) {
-				let fontname = items[i].split('.');
+      items.forEach(item => {
+        let fontname = item.split('.');
 				fontname = fontname[0];
         let font = fontname.split('-')[0];
         let weight = checkWeight(fontname);
 
+        console.log(item);
         if (c_fontname != fontname) {
           fs.appendFile(srcFonts, `@include font-face("${font}", "${fontname}", ${weight});\r\n`, cb);
         }
         c_fontname = fontname;
-      }
+      })
     }
   })
 
@@ -222,30 +242,31 @@ async function constructor() {
   })
 }
 
-
 function clear() {
   return del('dist')
 }
 
+const watching = (src, func)=>{
+  watch(src, func).on('change', sync.reload)
+}
 
 function server() {
   sync.init({
     server: './dist'
   })
 
-  watch('src/page', series(constructor)).on('change', sync.reload)
-  watch('src/**/**.pug', series(html)).on('change', sync.reload)
-  watch('src/**/**.html', series(html)).on('change', sync.reload)
-  watch('src/font/**', fonts).on('change', sync.reload)
-  watch('src/js/**/*.js', webpacks).on('change', sync.reload)
-  watch('src/scss/**/**.scss', series(stylecCompiler)).on('change', sync.reload)
-  watch('src/less/**/**.less', series(stylecCompiler)).on('change', sync.reload)
-  watch('src/styl/**/**.styl', series(stylecCompiler)).on('change', sync.reload)
-  watch('src/img/**', series(minifyImg)).on('change', sync.reload)
+  watching('src/page', constructor);
+  watching('src/**/**.pug', html);
+  watching('src/**/**.html', html);
+  watching('src/font/**', fonts);
+  watching('src/js/**/*.js', webpacks);
+  watching('src/scss/**/**.scss', stylecCompiler);
+  watching('src/less/**/**.less', stylecCompiler);
+  watching('src/styl/**/**.styl', stylecCompiler);
+  watching('src/img/**.svg', svgSprites);
+  watching('src/img/**', minifyImg);
 }
 
-
 // Дефолтные настройки 
-exports.default = series(clear, constructor, webpacks, fonts, fontsStyle, stylecCompiler, html, minifyImg, server)
-
+exports.default = series(clear, constructor, webpacks, fonts, fontsStyle, stylecCompiler, html, minifyImg, svgSprites, server)
 exports.clear = clear
