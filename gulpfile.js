@@ -2,12 +2,15 @@ const {
   src,
   dest,
   series,
+  parallel,
   watch
 } = require('gulp');
+const notify = require('gulp-notify');
 const sass = require('gulp-sass')
 const less = require('gulp-less')
 const stylus = require('gulp-stylus')
 const csso = require('gulp-csso')
+const cleanCSS = require('gulp-clean-css');
 const rename = require("gulp-rename")
 const sourcemaps = require('gulp-sourcemaps')
 const include = require('gulp-file-include')
@@ -23,26 +26,11 @@ const svgmin = require('gulp-svgmin')
 const cheerio = require('gulp-cheerio')
 const fs = require('fs')
 const pug = require('gulp-pug');
+const ttf2woff2 = require('gulp-ttf2woff2');
 
 
 const compilePreprocessorCSS = 'scss'
-const compilePreprocessorHTML = 'pug'
-
-const returnCompile = (name)=>{
-  let defaultComile = `@import "./components/${name}";\n`
-  switch(compilePreprocessorCSS){
-    case "styl": 
-      defaultComile = `@import './components/${name}'\n`; 
-    break;
-    case "sass": 
-      defaultComile = `@import "./components/${name}"\n`; 
-    break;
-    case "less": 
-      defaultComile = `@import "./components/_${name}.less";\n`; 
-    break;
-  }
-  return defaultComile;
-}
+const compilePreprocessorHTML = 'html'
 
 function html() {
   if (compilePreprocessorHTML == 'html') {
@@ -62,7 +50,7 @@ function html() {
 }
 
 const svgSprites = () => {
-  return src('./src/img/**.svg')
+  return src('./src/img/svg/**.svg')
     .pipe(svgmin({
       js2svg: {
         pretty: true
@@ -86,6 +74,12 @@ const svgSprites = () => {
     .pipe(dest('./dist/img'));
 }
 
+function minifyImg() {
+  return src(['./src/img/*.jpg', './src/img/*.png', './src/img/**.jpeg', './src/img/*.svg'])
+    .pipe(imagemin())
+    .pipe(dest('dist/img'))
+}
+
 function webpacks() {
   return src('src/js/main.js')
     .pipe(gulpWebpack({
@@ -100,7 +94,10 @@ function webpacks() {
           use: {
             loader: 'babel-loader',
             options: {
-              presets: ['@babel/preset-env']
+              presets: [['@babel/preset-env', {
+                useBuiltIns: 'usage',
+                corejs: 3
+              }]]
             }
           }
         }, ]
@@ -121,28 +118,46 @@ function webpacks() {
 
 function fonts() {
   return src('./src/font/**.ttf')
+    .pipe(ttf2woff2())
     .pipe(dest('./dist/font/'));
 }
 
-function stylecCompiler() {
-  return src(`src/${compilePreprocessorCSS}/index.${compilePreprocessorCSS}`)
+const returnCompile = (name)=>{
+  let defaultComile = `@import "./components/${name}";\n`
+  switch(compilePreprocessorCSS){
+    case "styl": 
+      defaultComile = `@import './components/${name}'\n`; 
+    break;
+    case "sass": 
+      defaultComile = `@import "./components/${name}"\n`; 
+    break;
+    case "less": 
+      defaultComile = `@import "./components/_${name}.less";\n`; 
+    break;
+  }
+  return defaultComile;
+}
+
+const stylecCompiler = () => {
+  return src(`./src/${compilePreprocessorCSS}/**/*.${compilePreprocessorCSS}`)
     .pipe(sourcemaps.init())
-    .pipe(sass())
+    .pipe(sass({
+      outputStyle: 'expanded'
+    }).on("error", notify.onError()))
     .pipe(rename({
       suffix: '.min'
     }))
-    .pipe(autoprefixer())
-    .pipe(csso())
+    .pipe(autoprefixer({
+      cascade: false,
+    }))
+    .pipe(cleanCSS({
+      level: 2
+    }))
     .pipe(sourcemaps.write('.'))
-    .pipe(dest('./dist/style'))
+    .pipe(dest('./dist/css/'))
     .pipe(sync.stream());
 }
 
-function minifyImg() {
-  return src(['./src/img/**.jpg', './src/img/**.png', './src/img/**.jpeg'])
-    .pipe(imagemin())
-    .pipe(dest('dist/img'))
-}
 
 const cb = () => {};
 
@@ -246,7 +261,7 @@ function clear() {
   return del('dist')
 }
 
-const watching = (src, func)=>{
+const watching = (src, func, )=>{
   watch(src, func).on('change', sync.reload)
 }
 
@@ -263,10 +278,10 @@ function server() {
   watching('src/scss/**/**.scss', stylecCompiler);
   watching('src/less/**/**.less', stylecCompiler);
   watching('src/styl/**/**.styl', stylecCompiler);
-  watching('src/img/**.svg', svgSprites);
+  watching('src/img/svg/**.svg', svgSprites);
   watching('src/img/**', minifyImg);
 }
 
 // Дефолтные настройки 
-exports.default = series(clear, constructor, webpacks, fonts, fontsStyle, stylecCompiler, html, minifyImg, svgSprites, server)
+exports.default = series(clear, parallel(fonts, minifyImg, svgSprites), constructor, webpacks, fontsStyle, stylecCompiler, html, server)
 exports.clear = clear
