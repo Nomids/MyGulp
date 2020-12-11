@@ -2,4 +2,4 @@ async function log(str) {
     await console.log(str);
 }
 
-log("sdasdasd")
+log("Gulp is start");
