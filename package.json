@@ -1,11 +1,11 @@
 {
-  "name": "gulpdmitriy",
-  "version": "1.6.5",
-  "description": "",
+  "name": "gulp-buildessdasdadasd",
+  "version": "1.0.0",
+  "description": "Your package description",
   "main": "index.js",
   "scripts": {
     "start": "npx gulp",
-    "build": "npx build"
+    "build": "npx gulp build"
   },
   "browserslist": [
     "last 2 versions"

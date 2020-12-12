@@ -35,9 +35,6 @@ function html() {
       .pipe(include({
         prefix: '@@'
       }))
-      .pipe(htmlmin({
-        collapseWhitespace: true
-      }))
       .pipe(dest('dist'))
   } else {
     return src('src/**.pug')
@@ -73,14 +70,13 @@ const svgSprites = () => {
 
 function minifyImg() {
   return src(['./src/img/*.jpg', './src/img/*.png', './src/img/**.jpeg', './src/img/*.svg'])
-    .pipe(imagemin())
     .pipe(dest('dist/img'))
 }
 
 function webpacks() {
   return src('src/js/main.js')
     .pipe(gulpWebpack({
-      mode: 'production',
+      mode: 'development',
       output: {
         filename: 'main.js',
       },
@@ -104,9 +100,6 @@ function webpacks() {
       console.error('WEBPACK ERROR', err);
       this.emit('end'); // Don't stop the rest of the task
     })
-    .pipe(rename({
-      suffix: '.min'
-    }))
     .pipe(sourcemaps.init())
     .pipe(sourcemaps.write('.'))
     .pipe(dest('dist/js'))
@@ -285,3 +278,78 @@ exports.clear = clear
 
 // Build
 
+function htmlBuild() {
+  if (compilePreprocessorHTML == 'html') {
+    return src('src/**.html')
+      .pipe(include({
+        prefix: '@@'
+      }))
+      .pipe(htmlmin({
+        collapseWhitespace: true
+      }))
+      .pipe(dest('dist'))
+  } else {
+    return src('src/**.pug')
+      .pipe(pug())
+      .pipe(dest('dist'))
+  }
+}
+
+function minifyImgBuild() {
+  return src(['./src/img/*.jpg', './src/img/*.png', './src/img/**.jpeg', './src/img/*.svg'])
+    .pipe(imagemin())
+    .pipe(dest('dist/img'))
+}
+
+const stylecCompilerBuild = () => {
+  return src(`./src/${compilePreprocessorCSS}/**/*.${compilePreprocessorCSS}`)
+    .pipe(sourcemaps.init())
+    .pipe(sass({
+      outputStyle: 'expanded'
+    }).on("error", notify.onError()))
+    .pipe(rename({
+      suffix: '.min'
+    }))
+    .pipe(autoprefixer({
+      cascade: false,
+    }))
+    .pipe(cleanCSS({
+      level: 2
+    }))
+    .pipe(dest('./dist/css/'));
+}
+
+function webpacksBuild() {
+  return src('src/js/main.js')
+    .pipe(gulpWebpack({
+      mode: 'production',
+      output: {
+        filename: 'main.js',
+      },
+      module: {
+        rules: [{
+          test: /\.m?js$/,
+          exclude: /(node_modules|bower_components)/,
+          use: {
+            loader: 'babel-loader',
+            options: {
+              presets: [['@babel/preset-env', {
+                useBuiltIns: 'usage',
+                corejs: 3
+              }]]
+            }
+          }
+        }, ]
+      }
+    }))
+    .on('error', function (err) {
+      console.error('WEBPACK ERROR', err);
+      this.emit('end'); // Don't stop the rest of the task
+    })
+    .pipe(rename({
+      suffix: '.min'
+    }))
+    .pipe(dest('dist/js'))
+}
+
+exports.build = series(clear, parallel(fonts, minifyImgBuild, svgSprites), webpacksBuild, stylecCompilerBuild, htmlBuild)
