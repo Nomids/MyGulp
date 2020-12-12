@@ -282,3 +282,6 @@ function server() {
 // Дефолтные настройки 
 exports.default = series(clear, parallel(fonts, minifyImg, svgSprites), constructor, webpacks, fontsStyle, stylecCompiler, html, server)
 exports.clear = clear
+
+// Build
+
